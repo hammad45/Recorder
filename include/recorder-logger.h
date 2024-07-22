@@ -89,7 +89,8 @@ typedef struct RecorderLogger_t {
     bool directory_created;
 
     int current_cfg_terminal;
-
+    int pattern_id;
+       
     Grammar        cfg;
     CallSignature* cst;
 
