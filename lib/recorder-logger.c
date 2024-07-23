@@ -533,20 +533,20 @@ void logger_set_mpi_info(int mpi_rank, int mpi_size) {
     int mpi_initialized;
     PMPI_Initialized(&mpi_initialized);      // MPI_Initialized() is not intercepted
     if(mpi_initialized)
-        GOTCHA_REAL_CALL(MPI_Bcast) (&logger.start_ts, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+        recorder_bcast(&logger.start_ts, sizeof(logger.start_ts), 0, MPI_COMM_WORLD);
 
     // Create traces directory
     create_traces_dir();
 
     // Rank 0 broadcasts the trace direcotry path
     if(mpi_initialized)
-        GOTCHA_REAL_CALL(MPI_Bcast) (logger.traces_dir, sizeof(logger.traces_dir), MPI_BYTE, 0, MPI_COMM_WORLD);
+        recorder_bcast(logger.traces_dir, sizeof(logger.traces_dir), 0, MPI_COMM_WORLD);
 
     sprintf(logger.cst_path, "%s/%d.cst", logger.traces_dir, mpi_rank);
     sprintf(logger.cfg_path, "%s/%d.cfg", logger.traces_dir, mpi_rank);
 
     if(mpi_initialized)
-        GOTCHA_REAL_CALL(MPI_Barrier) (MPI_COMM_WORLD);
+        recorder_barrier(MPI_COMM_WORLD);
 
     char perprocess_ts_filename[1024];
     ts_get_filename(&logger, perprocess_ts_filename);
@@ -566,8 +566,6 @@ void logger_init() {
     GOTCHA_SET_REAL_CALL(rmdir,  RECORDER_POSIX);
     GOTCHA_SET_REAL_CALL(remove, RECORDER_POSIX);
     GOTCHA_SET_REAL_CALL(access, RECORDER_POSIX);
-    GOTCHA_SET_REAL_CALL(MPI_Bcast, RECORDER_MPI);
-    GOTCHA_SET_REAL_CALL(MPI_Barrier, RECORDER_MPI);
 
     double global_tstart = recorder_wtime();
 
@@ -696,6 +694,7 @@ void logger_finalize() {
     cuda_profiler_exit();
     #endif
 
+
     // Write out timestamps
     // and merge per-process ts files into a single one
     if(logger.ts_index > 0)
@@ -707,6 +706,7 @@ void logger_finalize() {
     char perprocess_ts_filename[1024];
     ts_get_filename(&logger, perprocess_ts_filename);
     GOTCHA_REAL_CALL(remove)(perprocess_ts_filename);
+
 
     // interprocess I/O pattern recognition
     if (logger.interprocess_pattern_recognition) {
@@ -733,5 +733,6 @@ void logger_finalize() {
         save_global_metadata();
         RECORDER_LOGINFO("[Recorder] trace files have been written to %s\n", logger.traces_dir);
     }
+
 }
 

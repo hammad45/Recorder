@@ -232,9 +232,6 @@ CallSignature* copy_cst(CallSignature* origin) {
 
 CallSignature* compress_csts(RecorderLogger* logger) {
 
-    GOTCHA_SET_REAL_CALL(MPI_Send, RECORDER_MPI);
-    GOTCHA_SET_REAL_CALL(MPI_Recv, RECORDER_MPI);
-
     int my_rank = logger->rank;
     int other_rank;
     int mask = 1;
@@ -251,14 +248,15 @@ CallSignature* compress_csts(RecorderLogger* logger) {
 
         if(other_rank >= logger->nprocs) continue;
 
-        size_t size;
+        size_t size, remain_cst_size;
         void* buf;
+        void* buf_ptr;
 
         // bigger ranks send to smaller ranks
         if(my_rank < other_rank) {
-            GOTCHA_REAL_CALL(MPI_Recv)(&size, sizeof(size), MPI_BYTE, other_rank, mask, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            recorder_recv(&size, sizeof(size), other_rank, mask, MPI_COMM_WORLD);
             buf = recorder_malloc(size);
-            GOTCHA_REAL_CALL(MPI_Recv)(buf, size, MPI_BYTE, other_rank, mask, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            recorder_recv(buf, size, other_rank, mask, MPI_COMM_WORLD);
 
             int cst_rank, entries, key_len;
             unsigned count;
@@ -320,8 +318,8 @@ CallSignature* compress_csts(RecorderLogger* logger) {
 
         } else {   // SENDER
             buf = serialize_cst(merged_cst, &size);
-            GOTCHA_REAL_CALL(MPI_Send)(&size, sizeof(size), MPI_BYTE, other_rank, mask, MPI_COMM_WORLD);
-            GOTCHA_REAL_CALL(MPI_Send)(buf, size, MPI_BYTE, other_rank, mask, MPI_COMM_WORLD);
+            recorder_send(&size, sizeof(size), other_rank, mask, MPI_COMM_WORLD);
+            recorder_send(buf, size, other_rank, mask, MPI_COMM_WORLD);
             recorder_free(buf, size);
             done = true;
         }
@@ -355,8 +353,8 @@ void save_cst_merged(RecorderLogger* logger) {
     if(logger->rank == 0) {
         cst_stream = serialize_cst(compressed_cst, &cst_stream_size);
 
-        GOTCHA_REAL_CALL(MPI_Bcast)(&cst_stream_size, sizeof(cst_stream_size), MPI_BYTE, 0, MPI_COMM_WORLD);
-        GOTCHA_REAL_CALL(MPI_Bcast)(cst_stream, cst_stream_size, MPI_BYTE, 0, MPI_COMM_WORLD);
+        recorder_bcast(&cst_stream_size, sizeof(cst_stream_size), 0, MPI_COMM_WORLD);
+        recorder_bcast(cst_stream, cst_stream_size, 0, MPI_COMM_WORLD);
 
         // 3. Rank 0 write out the compressed CST
         errno = 0;
@@ -370,9 +368,9 @@ void save_cst_merged(RecorderLogger* logger) {
             printf("[Recorder] Open file: %s failed, errno: %d\n", cst_fname, errno);
         }
     } else {
-        GOTCHA_REAL_CALL(MPI_Bcast)(&cst_stream_size, sizeof(cst_stream_size), MPI_BYTE, 0, MPI_COMM_WORLD);
+        recorder_bcast(&cst_stream_size, sizeof(cst_stream_size), 0, MPI_COMM_WORLD);
         cst_stream = recorder_malloc(cst_stream_size);
-        GOTCHA_REAL_CALL(MPI_Bcast)(cst_stream, cst_stream_size, MPI_BYTE, 0, MPI_COMM_WORLD);
+        recorder_bcast(cst_stream, cst_stream_size, 0, MPI_COMM_WORLD);
 
         // 3. Other rank get the compressed cst stream from rank 0
         // then convert it to the CST

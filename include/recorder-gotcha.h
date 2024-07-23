@@ -53,6 +53,21 @@ bool gotcha_hdf5_tracing();
 #define GOTCHA_WRAP_ACTION(func)                                        \
     {#func, WRAPPER_NAME(func), &WRAPPEE_HANDLE(func)}
 
+/**
+ * The GOTCHA_SET_REAL_CALL_NOCHECK and
+ * GOTCHA_SET_REAL_CALL marcos set the the __real_func
+ * pointer to the real original functionc all.
+ *
+ * If a function is wrapped by GOTCHA, then its real
+ * funciton pointer is changed by GOTCHA. We use
+ * gotcha_get_wrappee() to get the correct pointer.
+ * Otherwise, simply return the acutal funciton pointer.
+ *
+ * The _NOCHECK version assumes the function has been 
+ * wrapped by GOTCHA library (i.e. function will be 
+ * intercepted by Recorder). Caller of this version must
+ * make sure of this!
+ */
 #define GOTCHA_SET_REAL_CALL_NOCHECK(func)                              \
     do {                                                                \
         void* funcptr = gotcha_get_wrappee(WRAPPEE_HANDLE(func));       \

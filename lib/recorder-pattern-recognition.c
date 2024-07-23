@@ -27,6 +27,7 @@ off64_t iopr_intraprocess(const char *func, off64_t offset) {
         HASH_ADD_STR(func2offset_map, func, entry);
         return offset;
     } else {
+        entry->offset = offset;
         return offset - entry->offset;
     }
 }

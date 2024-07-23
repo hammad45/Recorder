@@ -10,6 +10,10 @@
 #include <zlib.h>
 #include "recorder.h"
 
+#define MPI_CHUNK_SIZE (1*1024*1024*1024)
+#define MIN(a,b) (((a)<(b))?(a):(b))
+#define MAX(a,b) (((a)<(b))?(b):(a))
+
 // Log pointer addresses in the trace file?
 static bool   log_pointer = false;
 static size_t memory_usage = 0;
@@ -203,6 +207,72 @@ inline double recorder_wtime(void) {
   return (time.tv_sec + ((double)time.tv_usec / 1000000));
   // Cannot use PMPI_Wtime here as MPI_Init may not be initialized
   //return PMPI_Wtime();
+}
+
+/* 
+ * Our own bcast call during the tracing process
+ * it creates a tmp comm to perform the bcast
+ * this avoids interfering with applicaiton's
+ * bcast calls on the same communicator.
+ *
+ * The count is of type size_t
+ * instead of int as in MPI_Bcast. And we break
+ * large count (>INT_MAX) to multiple MPI_Bcast()
+ * calls to avoid overflow error.
+ */
+void recorder_bcast(void *buf, size_t count, int root, MPI_Comm comm) {
+    GOTCHA_SET_REAL_CALL(MPI_Comm_dup, RECORDER_MPI);
+    GOTCHA_SET_REAL_CALL(MPI_Bcast, RECORDER_MPI);
+    GOTCHA_SET_REAL_CALL(MPI_Comm_free, RECORDER_MPI);
+
+    MPI_Comm tmp_comm;
+    GOTCHA_REAL_CALL(MPI_Comm_dup)(comm, &tmp_comm);
+
+    size_t remain = count;
+    void* buf_ptr = buf;
+    do {
+        int bcast_count = (int) MIN(remain, MPI_CHUNK_SIZE);
+        GOTCHA_REAL_CALL(MPI_Bcast)(buf_ptr, bcast_count, MPI_BYTE, root, tmp_comm);
+        remain  -= bcast_count;
+        buf_ptr += bcast_count;
+    } while(remain > 0);
+
+    GOTCHA_REAL_CALL(MPI_Comm_free)(&tmp_comm);
+}
+
+void recorder_send(void *buf, size_t count, int dst, int tag, MPI_Comm comm) {
+    GOTCHA_SET_REAL_CALL(MPI_Send, RECORDER_MPI);
+    void*  buf_ptr = buf;
+    size_t remain  = count;
+    do {
+        int send_count = (int) MIN(remain, MPI_CHUNK_SIZE);
+        GOTCHA_REAL_CALL(MPI_Send)(buf_ptr, send_count, MPI_BYTE, dst, tag, comm);
+        remain  -= send_count;
+        buf_ptr += send_count;
+    } while(remain > 0);
+}
+
+void recorder_recv(void *buf, size_t count, int src, int tag, MPI_Comm comm) {
+    GOTCHA_SET_REAL_CALL(MPI_Recv, RECORDER_MPI);
+    void*  buf_ptr = buf;
+    size_t remain  = count;
+    do {
+        int recv_count = (int) MIN(remain, MPI_CHUNK_SIZE);
+        GOTCHA_REAL_CALL(MPI_Recv)(buf_ptr, recv_count, MPI_BYTE, src, tag, comm, MPI_STATUS_IGNORE);
+        remain  -= recv_count;
+        buf_ptr += recv_count;
+    } while(remain > 0);
+}
+
+void recorder_barrier(MPI_Comm comm) {
+    GOTCHA_SET_REAL_CALL(MPI_Comm_dup, RECORDER_MPI);
+    GOTCHA_SET_REAL_CALL(MPI_Barrier, RECORDER_MPI);
+    GOTCHA_SET_REAL_CALL(MPI_Comm_free, RECORDER_MPI);
+
+    MPI_Comm tmp_comm;
+    GOTCHA_REAL_CALL(MPI_Comm_dup)(comm, &tmp_comm);
+    GOTCHA_REAL_CALL(MPI_Barrier)(tmp_comm);
+    GOTCHA_REAL_CALL(MPI_Comm_free)(&tmp_comm);
 }
 
 /* Integer to stirng */

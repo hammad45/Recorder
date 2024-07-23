@@ -3,6 +3,7 @@
 #include <fcntl.h>
 #include <pthread.h>
 #include <stdio.h>
+#include <mpi.h>
 
 void utils_init();
 void utils_finalize();
@@ -21,6 +22,13 @@ const char* get_function_name_by_id(int id);
 unsigned char get_function_id_by_name(const char* name);
 char* realrealpath(const char* path);           // return the absolute path (mapped to id in string)
 int mkpath(char* file_path, mode_t mode);       // recursive mkdir()
+
+
+// recorder send/recv/bcast only handles MPI_BYTE stream
+void recorder_send( void *buf, size_t count, int dst, int tag, MPI_Comm comm);
+void recorder_recv( void *buf, size_t count, int src, int tag, MPI_Comm comm);
+void recorder_bcast(void *buf, size_t count, int root, MPI_Comm comm);
+void recorder_barrier(MPI_Comm comm);
 
 int min_in_array(int* arr, size_t len);
 double recorder_log2(int val);
