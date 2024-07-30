@@ -93,7 +93,8 @@ char* compose_cs_key(Record* record, int* key_len) {
 // Caller needs to free the record after use
 Record* cs_to_record(CallSignature *cs) {
 
-    Record *record = malloc(sizeof(Record));
+    Record *record = recorder_malloc(sizeof(Record));
+    record->res = NULL; // we don't keep return value in Call Signature
 
     char* key = cs->key;
 
@@ -107,7 +108,7 @@ Record* cs_to_record(CallSignature *cs) {
     memcpy(&record->arg_count, key+pos, sizeof(record->arg_count));
     pos += sizeof(record->arg_count);
 
-    record->args = malloc(sizeof(char*) * record->arg_count);
+    record->args = recorder_malloc(sizeof(char*) * record->arg_count);
 
     int arg_strlen;
     memcpy(&arg_strlen, key+pos, sizeof(int));
