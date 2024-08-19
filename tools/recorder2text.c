@@ -71,7 +71,6 @@ int main(int argc, char **argv) {
     int end_rank   = min(reader.metadata.total_ranks, n*(mpi_rank+1));
 
     for(int rank = start_rank; rank < end_rank; rank++) {
-
         sprintf(textfile_path, formatting_fname, textfile_dir, rank);
         FILE* fout = fopen(textfile_path, "w");
 

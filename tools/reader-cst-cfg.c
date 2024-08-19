@@ -21,6 +21,54 @@ void reader_free_cfg(CFG* cfg) {
     }
 }
 
+
+void reader_decode_cst_2_3(RecorderReader *reader, int rank, CST *cst) {
+    cst->rank = rank;
+    char cst_filename[1096] = {0};
+    sprintf(cst_filename, "%s/%d.cst", reader->logs_dir, rank);
+
+    FILE* f = fopen(cst_filename, "rb");
+
+    int key_len;
+    fread(&cst->entries, sizeof(int), 1, f);
+
+    cst->cs_list = malloc(cst->entries * sizeof(CallSignature));
+
+    for(int i = 0; i < cst->entries; i++) {
+            fread(&cst->cs_list[i].terminal_id, sizeof(int), 1, f);
+            fread(&cst->cs_list[i].key_len, sizeof(int), 1, f);
+    
+            cst->cs_list[i].key = malloc(cst->cs_list[i].key_len);
+            fread(cst->cs_list[i].key, 1, cst->cs_list[i].key_len, f);
+    
+            assert(cst->cs_list[i].terminal_id < cst->entries);
+        }
+    fclose(f);
+}
+
+void reader_decode_cfg_2_3(RecorderReader *reader, int rank, CFG* cfg) {
+    cfg->rank = rank;
+    char cfg_filename[1096] = {0};
+    sprintf(cfg_filename, "%s/%d.cfg", reader->logs_dir, rank);
+
+    FILE* f = fopen(cfg_filename, "rb");
+
+    fread(&cfg->rules, sizeof(int), 1, f);
+
+    cfg->cfg_head = NULL;
+    for(int i = 0; i < cfg->rules; i++) {
+        RuleHash *rule = malloc(sizeof(RuleHash));
+    
+        fread(&(rule->rule_id), sizeof(int), 1, f);
+        fread(&(rule->symbols), sizeof(int), 1, f);
+
+        rule->rule_body = (int*) malloc(sizeof(int)*rule->symbols*2);
+        fread(rule->rule_body, sizeof(int), rule->symbols*2, f);
+        HASH_ADD_INT(cfg->cfg_head, rule_id, rule);
+    }
+    fclose(f);
+}
+
 void reader_decode_cst(int rank, void* buf, CST* cst) {
     cst->rank = rank;
 

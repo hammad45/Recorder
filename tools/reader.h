@@ -56,11 +56,14 @@ typedef struct RecorderReader_t {
     // and cfgs[rank]. 
     CST** csts;
     CFG** cfgs;     
+
+    int trace_version_major;
+    int trace_version_minor;
 } RecorderReader;
 
 
 /**
- * Similar but simplified structure
+ * Similar but simplified Record structure
  * for use by recorder-viz
  */
 typedef struct PyRecord_t {

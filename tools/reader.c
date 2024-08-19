@@ -65,7 +65,7 @@ void* read_zlib(FILE* source) {
     return decompressed;
 }
 
-void check_version(RecorderReader* reader) {
+void check_version(RecorderReader* reader, int* v_major, int* v_minor) {
     char version_file[1096] = {0};
     sprintf(version_file, "%s/VERSION", reader->logs_dir);
 
@@ -73,8 +73,13 @@ void check_version(RecorderReader* reader) {
     assert(fp != NULL);
     int major, minor, patch;
     fscanf(fp, "%d.%d.%d", &major, &minor, &patch);
-    if(major != RECORDER_VERSION_MAJOR || minor != RECORDER_VERSION_MINOR) {
-        fprintf(stderr, "incompatible version: file=%d.%d.%d != reader=%d.%d.%d\n",
+    *v_major = major;
+    *v_minor = minor;
+
+    double v1 = major + minor/10.0;
+    double v2 = RECORDER_VERSION_MAJOR + RECORDER_VERSION_MINOR/10.0;
+    if (v1 > v2) {
+        fprintf(stderr, "incompatible version: trace=%d.%d.%d > reader=%d.%d.%d\n",
                 major, minor, patch, RECORDER_VERSION_MAJOR,
                 RECORDER_VERSION_MINOR, RECORDER_VERSION_PATCH);
         exit(1);
@@ -88,7 +93,34 @@ void read_metadata(RecorderReader* reader) {
 
     FILE* fp = fopen(metadata_file, "rb");
     assert(fp != NULL);
-    fread(&reader->metadata, sizeof(reader->metadata), 1, fp);
+    if (reader->trace_version_major == 2 && reader->trace_version_minor == 3) {
+        struct RecorderMetadata_2_3 {
+            int    total_ranks;
+            double start_ts;
+            double time_resolution;
+            int    ts_buffer_elements;
+            int    ts_compression_algo; // timestamp compression algorithm
+        };
+        struct RecorderMetadata_2_3 metadata_2_3;
+        fread(&metadata_2_3, sizeof(metadata_2_3), 1, fp);
+        reader->metadata.total_ranks = metadata_2_3.total_ranks;
+        reader->metadata.posix_tracing = 1;
+        reader->metadata.mpi_tracing = 1;
+        reader->metadata.mpiio_tracing = 1;
+        reader->metadata.hdf5_tracing = 1;
+        reader->metadata.store_tid = 1;
+        reader->metadata.store_call_depth = 1;
+        reader->metadata.start_ts = metadata_2_3.start_ts;
+        reader->metadata.time_resolution = metadata_2_3.time_resolution;
+        reader->metadata.ts_buffer_elements= metadata_2_3.ts_buffer_elements;
+        reader->metadata.interprocess_compression = 0;
+        reader->metadata.interprocess_pattern_recognition = 0;
+        reader->metadata.intraprocess_pattern_recognition = 0;
+        reader->metadata.ts_compression = 0;
+    } else {
+        fread(&reader->metadata, sizeof(reader->metadata), 1, fp);
+    }
+
 
     long pos = ftell(fp);
     fseek(fp, 0, SEEK_END);
@@ -132,7 +164,7 @@ void recorder_init_reader(const char* logs_dir, RecorderReader *reader) {
     reader->hdf5_start_idx = -1;
     reader->prev_tstart = 0.0;
 
-    check_version(reader);
+    check_version(reader, &reader->trace_version_major, &reader->trace_version_minor);
 
     read_metadata(reader);
 
@@ -184,23 +216,33 @@ void recorder_init_reader(const char* logs_dir, RecorderReader *reader) {
 
 	} else {
         for(int rank = 0; rank < nprocs; rank++) {
-            char cst_fname[1096] = {0};
-            sprintf(cst_fname, "%s/%d.cst", reader->logs_dir, rank);
-            FILE* cst_file = fopen(cst_fname, "rb");
-            void* buf_cst = read_zlib(cst_file);
-            reader->csts[rank] = (CST*) malloc(sizeof(CST));
-		    reader_decode_cst(rank, buf_cst, reader->csts[rank]);
-            free(buf_cst);
-            fclose(cst_file);
-
-            char cfg_fname[1096] = {0};
-            sprintf(cfg_fname, "%s/%d.cfg", reader->logs_dir, rank);
-            FILE* cfg_file = fopen(cfg_fname, "rb");
-            void* buf_cfg = read_zlib(cfg_file);
-            reader->cfgs[rank] = (CFG*) malloc(sizeof(CFG));
-            reader_decode_cfg(rank, buf_cfg, reader->cfgs[rank]);
-            free(buf_cfg);
-            fclose(cfg_file);
+            if (reader->trace_version_major == 2 && reader->trace_version_minor == 3) {
+                reader->csts[rank] = (CST*) malloc(sizeof(CST));
+                reader_decode_cst_2_3(reader, rank, reader->csts[rank]);
+            } else {
+                char cst_fname[1096] = {0};
+                sprintf(cst_fname, "%s/%d.cst", reader->logs_dir, rank);
+                FILE* cst_file = fopen(cst_fname, "rb");
+                void* buf_cst = read_zlib(cst_file);
+                reader->csts[rank] = (CST*) malloc(sizeof(CST));
+                reader_decode_cst(rank, buf_cst, reader->csts[rank]);
+                free(buf_cst);
+                fclose(cst_file);
+            }
+            
+            if (reader->trace_version_major == 2 && reader->trace_version_minor == 3) {
+                reader->cfgs[rank] = (CFG*) malloc(sizeof(CFG));
+                reader_decode_cfg_2_3(reader, rank, reader->cfgs[rank]);
+            } else {
+                char cfg_fname[1096] = {0};
+                sprintf(cfg_fname, "%s/%d.cfg", reader->logs_dir, rank);
+                FILE* cfg_file = fopen(cfg_fname, "rb");
+                void* buf_cfg = read_zlib(cfg_file);
+                reader->cfgs[rank] = (CFG*) malloc(sizeof(CFG));
+                reader_decode_cfg(rank, buf_cfg, reader->cfgs[rank]);
+                free(buf_cfg);
+                fclose(cfg_file);
+            }
         }
     }
 }
@@ -270,8 +312,10 @@ void rule_application(RecorderReader* reader, CFG* cfg, CST* cst, int rule_id, u
     for(int i = 0; i < rule->symbols; i++) {
         int sym_val = rule->rule_body[2*i+0];
         int sym_exp = rule->rule_body[2*i+1];
+
         if (sym_val >= TERMINAL_START_ID) { // terminal
             for(int j = 0; j < sym_exp; j++) {
+
                 Record* record = reader_cs_to_record(&(cst->cs_list[sym_val]));
 
                 // Fill in timestamps
@@ -293,16 +337,29 @@ void rule_application(RecorderReader* reader, CFG* cfg, CST* cst, int rule_id, u
     }
 }
 
-void decode_records_core(RecorderReader *reader, int rank,
-                             void (*user_op)(Record*, void*), void* user_arg, bool free_record) {
-
-    int nprocs = reader->metadata.total_ranks;
-	CST* cst = reader_get_cst(reader, rank);
-	CFG* cfg = reader_get_cfg(reader, rank);
-
-    reader->prev_tstart = 0.0;
+// caller must free the timestamp
+// buffer after use
+uint32_t* read_timestamp_file(RecorderReader* reader, int rank) {
 
     char ts_fname[1096] = {0};
+    uint32_t* ts_buf = NULL;
+
+    if (reader->trace_version_major==2 && reader->trace_version_minor==3) {
+        sprintf(ts_fname, "%s/%d.ts", reader->logs_dir, rank);
+        FILE* ts_file = fopen(ts_fname, "rb");
+        fseek(ts_file, 0, SEEK_END);
+        long filesize = ftell(ts_file);
+        fseek(ts_file, 0, SEEK_CUR);
+
+        ts_buf = (uint32_t*) malloc(filesize); 
+        fread(ts_buf, 1, filesize, ts_file);
+        fclose(ts_file);
+
+        return ts_buf;
+    }
+
+    int nprocs = reader->metadata.total_ranks;
+
     sprintf(ts_fname, "%s/recorder.ts", reader->logs_dir);
     FILE* ts_file = fopen(ts_fname, "rb");
 
@@ -321,7 +378,6 @@ void decode_records_core(RecorderReader *reader, int rank,
     fseek(ts_file, offset, SEEK_CUR);
 
     // finally read to the buffer
-    uint32_t* ts_buf;
     if (reader->metadata.ts_compression) {
         ts_buf = (uint32_t*) read_zlib(ts_file);
     } else {
@@ -329,6 +385,19 @@ void decode_records_core(RecorderReader *reader, int rank,
         fread(ts_buf, 1, buf_sizes[rank], ts_file);
     }
     fclose(ts_file);
+    return ts_buf;
+}
+
+
+void decode_records_core(RecorderReader *reader, int rank,
+                             void (*user_op)(Record*, void*), void* user_arg, bool free_record) {
+
+	CST* cst = reader_get_cst(reader, rank);
+	CFG* cfg = reader_get_cfg(reader, rank);
+
+    reader->prev_tstart = 0.0;
+
+    uint32_t* ts_buf = read_timestamp_file(reader, rank);
 
     rule_application(reader, cfg, cst, -1, ts_buf, user_op, user_arg, free_record);
 

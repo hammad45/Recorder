@@ -48,6 +48,8 @@ typedef struct IntervalsMap_t {
  * recorder_get_cst_cfg() can be used to perform
  * custom tasks with CST and CFG
  */
+void reader_decode_cst_2_3(RecorderReader *reader, int rank, CST *cst);
+void reader_decode_cfg_2_3(RecorderReader *reader, int rank, CFG *cfg);
 void reader_decode_cst(int rank, void* buf, CST* cst);
 void reader_decode_cfg(int rank, void* buf, CFG* cfg);
 void reader_free_cst(CST *cst);

@@ -87,7 +87,7 @@ def get_shortest_path(G, src, dst):
 
 def verify_session_semantics(G, conflict_pairs, 
                              close_ops=["close", "fclose"],
-                             open_ops=["open", "fopen"]):
+                             open_ops=["open", "fopen"], reader=None, show_details=False):
     def check_pair_in_order(n1 , n2):
         next_sync = G.next_po_node(n1, close_ops)
         prev_sync = G.prev_po_node(n2, open_ops)
@@ -110,6 +110,12 @@ def verify_session_semantics(G, conflict_pairs,
     properly_synchronized = True
     total = len(conflict_pairs)
     i = 1
+    N = reader.GM.total_ranks
+    summary = {
+        'c_ranks_cnt': [[0 for _ in range(N)] for _ in range(N)],
+        'c_files_cnt': {},
+        'c_functions_cnt': {}
+    }
     for pair in conflict_pairs:
 
         # print progress
@@ -134,15 +140,15 @@ def verify_session_semantics(G, conflict_pairs,
             for n2 in n2s[rank]:
                 this_pair_ok = (check_pair_in_order(n1, n2) or check_pair_in_order(n2, n1))
                 if not this_pair_ok:
-                    print("%s <--> %s, properly synchronized: %s" %(n1, n2, this_pair_ok))
+                    get_conflict_info([n1, n2], reader, summary, args.show_details, this_pair_ok)
                     properly_synchronized = False
-
+    print_summary(summary)
     return properly_synchronized
 
-def verify_mpi_semantics(G, conflict_pairs):
+def verify_mpi_semantics(G, conflict_pairs,  reader=None):
     return verify_session_semantics(G, conflict_pairs,
                              close_ops = ["MPI_File_sync", "MPI_File_close"], \
-                             open_ops  = ["MPI_File_sync", "MPI_File_open"])
+                             open_ops  = ["MPI_File_sync", "MPI_File_open"], reader=reader)
 
 def verify_commit_semantics(G, conflict_pairs):
 
@@ -168,6 +174,64 @@ def verify_commit_semantics(G, conflict_pairs):
 
     return properly_synchronized
 
+def get_call_chain(node, reader):
+    call_chain = []
+    seq_id = node.seq_id
+    while reader.records[node.rank][seq_id].call_depth > 0:
+        call_chain.append(reader.records[node.rank][seq_id])
+        seq_id -= 1
+    call_chain.append(reader.records[node.rank][seq_id])
+    return call_chain
+
+def update_function_count(func_id, summary, reader):
+    func_name = reader.funcs[func_id]
+    summary['c_functions_cnt'][func_name] = summary['c_functions_cnt'].get(func_name, 0) + 1
+
+def build_call_chain_str(call_chain, reader):
+    return "-->".join(reader.funcs[cc.func_id] for cc in call_chain)
+
+def print_summary(summary):
+    print("=" * 80)
+    print("Summary".center(80))
+    print("=" * 80)
+
+    total_conflicts = sum([sum(values) for values in zip(*summary['c_ranks_cnt'])])
+    print(f"{'Total Conflicts:':<30} {total_conflicts}\n")
+
+    print(f"{'Rank':<10} {'Conflicts':<20}")
+    print("-" * 30)
+    for index, value in enumerate([sum(values) for values in zip(*summary['c_ranks_cnt'])]):
+        print(f"{index:<10} {value:<20}")
+    print()
+
+    print(f"{'File':<50} {'Conflicts':<20}")
+    print("-" * 70)
+    for key, count in summary['c_files_cnt'].items():
+        print(f"{key:<50} {count:<20}")
+    print()
+
+    print(f"{'Function Call':<50} {'Conflicts':<20}")
+    print("-" * 70)
+    for key, count in summary['c_functions_cnt'].items():
+        print(f"{key:<50} {count:<20}")
+    print("=" * 80)
+
+def get_conflict_info(nodes: list, reader: RecorderReader, summary=None, show_details=False, this_pair_ok=False):
+    left_call_chain = get_call_chain(nodes[0], reader)
+    right_call_chain = get_call_chain(nodes[1], reader)
+    file = reader.records[nodes[0].rank][nodes[0].seq_id].args[0].decode('utf-8')
+    if len(left_call_chain) > 0 and len(right_call_chain) > 0:
+        summary['c_ranks_cnt'][nodes[0].rank][nodes[1].rank] += 1
+        if file not in summary['c_files_cnt']:
+            summary['c_files_cnt'][file] = 0
+        summary['c_files_cnt'][file] += 1
+        update_function_count(left_call_chain[-1].func_id, summary, reader)
+        update_function_count(right_call_chain[-1].func_id, summary, reader)
+        if show_details:
+            r_str = build_call_chain_str(right_call_chain, reader)
+            l_str = build_call_chain_str(reversed(left_call_chain), reader)
+            print(f"{nodes[0].rank}: {l_str} <--> {nodes[1].rank}: {r_str} on file {file}, properly synchronized: {this_pair_ok}")
+
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
@@ -175,6 +239,7 @@ if __name__ == "__main__":
     #parser.add_argument("conflicts_file")
     parser.add_argument("--semantics", type=str, choices=["POSIX", "MPI-IO", "Commit", "Session"],
                         default="MPI-IO", help="Verify if I/O operations are properly synchronized under the specific semantics")
+    parser.add_argument("--show_details", action="store_true", help="Show details of the conflicts")
     args = parser.parse_args()
 
     reader = RecorderReader(args.traces_folder)
@@ -207,11 +272,11 @@ if __name__ == "__main__":
     if args.semantics == "POSIX":
         p = verify_posix_semantics(G, conflict_pairs)
     elif args.semantics == "MPI-IO":
-        p = verify_mpi_semantics(G, conflict_pairs)
+        p = verify_mpi_semantics(G, conflict_pairs, reader)
     elif args.semantics == "Commit":
         p = verify_commit_semantics(G, conflict_pairs)
     elif args.semantics == "Session":
-        p = verify_session_semantics(G, conflict_pairs)
+        p = verify_session_semantics(G, conflict_pairs, reader)
     t2 = time.time()
 
     if p:
