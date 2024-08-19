@@ -115,7 +115,7 @@ class MPIMatchHelper:
         # str first
         args = []
         for i in range(record.arg_count):
-            arg = record.args[i].decode("utf-8")
+            arg = record.args[i].decode("utf-8", "ignore")
             args.append(arg)
 
         src, dst, stag, rtag = None, None, None, None
@@ -433,7 +433,7 @@ def match_collective(mpi_call, helper):
         coll_call.matched = True
 
     mpi_call.matched = True
-    #print("match collective:", mpi_call.func, "root:", mpi_call.src, mpi_call.comm)
+    #print("match collective:", mpi_call.func, "root:", mpi_call.src, mpi_call.comm, mpi_call.req, mpi_call.reqflag)
     return edge
 
 #@profile

@@ -74,7 +74,7 @@ class VerifyIOGraph:
         nodes = self.nodes[target_rank]
         for target in nodes:
             if (target.func in funcs) and (self.has_path(current, target)):
-                targest.append(target)
+                target.append(target)
                 break
         return target
 
@@ -173,7 +173,7 @@ class VerifyIOGraph:
         # have added all nodes. We use this function
         # to add edges of matching MPI calls
         ghost_node_index = 0
-        for edge in mpi_edges:
+        for edge in mpi_edges[0:161]:
             head, tail = edge.head, edge.tail
             # all-to-all
             # TODO is there a many-to-many MPI call that
@@ -214,6 +214,7 @@ class VerifyIOGraph:
 
             # many-to-one, e.g., reduce
             elif edge.call_type == MPICallType.MANY_TO_ONE:
+                print(head, tail)
                 for h in head:
                     self.add_edge(h, tail)
             # one-to-many, e.g., bcast
@@ -228,4 +229,26 @@ class VerifyIOGraph:
         # Transitive clousre is too slow for large graphs
         #print("Generate transitive closure")
         #tc = nx.transitive_closure(self.G)
+
+    # Detect cycles of the graph
+    # correct code should contain no cycles.
+    # incorrect code, e.g., with unmatched collective calls
+    # may have cycles
+    # e.g., pnetcdf/test/testcases/test-varm.c
+    # it uses ncmpi_wait() call, which may result in 
+    # rank0 calling MPI_File_write_at_all(), and
+    # rank1 calling MPI_File_write_all()
+    # 
+    # Our verification algorithm assumes the graph
+    # has no code, so we need do this check first.
+    def check_cycles(self):
+        has_cycles = False
+        try:
+            cycle = nx.find_cycle(self.G)
+            print("Generated graph contain cycles. Original code may have bugs.")
+            print(cycle)
+            has_cycles = True
+        except nx.exception.NetworkXNoCycle:
+            pass
+        return has_cycles
 

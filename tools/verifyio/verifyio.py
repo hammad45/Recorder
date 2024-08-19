@@ -260,10 +260,15 @@ if __name__ == "__main__":
 
     t1 = time.time()
     G = VerifyIOGraph(all_nodes, mpi_edges, include_vc=True)
-    G.run_vector_clock()
-    #G.run_transitive_closure()
     t2 = time.time()
     print("build happens-before graph: %.3f secs, nodes: %d" %((t2-t1), G.num_nodes()))
+
+    # Correct code (traces) should result in 
+    # a DAG without any cycles
+    if G.check_cycles(): quit()
+
+    G.run_vector_clock()
+    #G.run_transitive_closure()
 
     # G.plot_graph("vgraph.jpg")
 

@@ -108,6 +108,8 @@ void read_metadata(RecorderReader* reader) {
         reader->metadata.mpi_tracing = 1;
         reader->metadata.mpiio_tracing = 1;
         reader->metadata.hdf5_tracing = 1;
+        reader->metadata.pnetcdf_tracing = 0;
+        reader->metadata.netcdf_tracing = 0;
         reader->metadata.store_tid = 1;
         reader->metadata.store_call_depth = 1;
         reader->metadata.start_ts = metadata_2_3.start_ts;
@@ -121,21 +123,34 @@ void read_metadata(RecorderReader* reader) {
         fread(&reader->metadata, sizeof(reader->metadata), 1, fp);
     }
 
-
-    long pos = ftell(fp);
+    // first 1024 bytes are reserved for metadata block
+    // the rest of the file stores all supported functions
     fseek(fp, 0, SEEK_END);
-    long fsize = ftell(fp) - pos;
+    long fsize = ftell(fp) - 1024; 
     char buf[fsize];
 
-    fseek(fp, pos, SEEK_SET);
+    fseek(fp, 1024, SEEK_SET);
     fread(buf, 1, fsize, fp);
 
     int start_pos = 0, end_pos = 0;
     int func_id = 0;
+    reader->supported_funcs = 0;
 
+    // read how many functions we intercept
+    for(end_pos = 0; end_pos < fsize; end_pos++) {
+        if(buf[end_pos] == '\n')
+            reader->supported_funcs++;
+    }
+    // initialize the func_list
+    reader->func_list = (char**) malloc(sizeof(char*)*reader->supported_funcs);
+    for (int i = 0; i < reader->supported_funcs; i++) {
+        reader->func_list[i] = (char*) malloc(64);
+        memset(reader->func_list[i], 0, 64);
+    }
+
+    // read and fill in func_list
     for(end_pos = 0; end_pos < fsize; end_pos++) {
         if(buf[end_pos] == '\n') {
-            memset(reader->func_list[func_id], 0, sizeof(reader->func_list[func_id]));
             memcpy(reader->func_list[func_id], buf+start_pos, end_pos-start_pos);
             start_pos = end_pos+1;
             if((reader->mpi_start_idx==-1) &&
@@ -144,8 +159,15 @@ void read_metadata(RecorderReader* reader) {
 
             if((reader->hdf5_start_idx==-1) &&
                 (NULL!=strstr(reader->func_list[func_id], "H5")))
-
                 reader->hdf5_start_idx = func_id;
+
+            if((reader->pnetcdf_start_idx==-1) &&
+                (NULL!=strstr(reader->func_list[func_id], "ncmpi")))
+                reader->pnetcdf_start_idx = func_id;
+
+            if((reader->netcdf_start_idx==-1) &&
+                (NULL!=strstr(reader->func_list[func_id], "nc_")))
+                reader->netcdf_start_idx = func_id;
 
             func_id++;
         }
@@ -162,6 +184,8 @@ void recorder_init_reader(const char* logs_dir, RecorderReader *reader) {
     strcpy(reader->logs_dir, logs_dir);
     reader->mpi_start_idx = -1;
     reader->hdf5_start_idx = -1;
+    reader->pnetcdf_start_idx = -1;
+    reader->netcdf_start_idx = -1;
     reader->prev_tstart = 0.0;
 
     check_version(reader, &reader->trace_version_major, &reader->trace_version_minor);
@@ -268,6 +292,9 @@ void recorder_free_reader(RecorderReader *reader) {
 	free(reader->cfgs);
 	free(reader->ugs);
 	free(reader->ug_ids);
+    for(int i = 0; i < reader->supported_funcs; i++)
+        free(reader->func_list[i]);
+    free(reader->func_list);
 
     memset(reader, 0, sizeof(*reader));
 }
@@ -279,6 +306,9 @@ const char* recorder_get_func_name(RecorderReader* reader, Record* record) {
 }
 
 int recorder_get_func_type(RecorderReader* reader, Record* record) {
+    // TODO why not just use func name to determine?
+    // is it because the user function may have name
+    // collision?
     if(record->func_id < reader->mpi_start_idx)
         return RECORDER_POSIX;
     if(record->func_id < reader->hdf5_start_idx) {
@@ -287,9 +317,11 @@ int recorder_get_func_type(RecorderReader* reader, Record* record) {
             return RECORDER_MPIIO;
         return RECORDER_MPI;
     }
+    if(record->func_id < reader->pnetcdf_start_idx)
+        return RECORDER_HDF5;
     if(record->func_id == RECORDER_USER_FUNCTION)
         return RECORDER_FTRACE;
-    return RECORDER_HDF5;
+    return RECORDER_PNETCDF;
 }
 
 void recorder_free_record(Record* r) {

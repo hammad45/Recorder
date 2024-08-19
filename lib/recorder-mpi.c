@@ -579,6 +579,20 @@ int RECORDER_MPI_IMP(MPI_File_iwrite_shared) (MPI_File fh, CONST void *buf, int 
     RECORDER_INTERCEPTOR_EPILOGUE(5, args);
 }
 
+int RECORDER_MPI_IMP(MPI_File_iwrite_all) (MPI_File fh, CONST void *buf, int count, MPI_Datatype datatype, MPI_Request * request, MPI_Fint* ierr) {
+    FILTER_MPIIO_CALL(MPI_File_iwrite_all, (fh, buf, count, datatype, request), &fh);
+    RECORDER_INTERCEPTOR_PROLOGUE_F(int, MPI_File_iwrite_all, (fh, buf, count, datatype, request), ierr);
+    char **args = assemble_args_list(5, file2id(&fh), ptoa(buf), itoa(count), type2name(datatype), ptoa(request));
+    RECORDER_INTERCEPTOR_EPILOGUE(5, args);
+}
+
+int RECORDER_MPI_IMP(MPI_File_iwrite_at_all) (MPI_File fh, MPI_Offset offset, CONST void *buf, int count, MPI_Datatype datatype, MPI_Request * request, MPI_Fint* ierr) {
+    FILTER_MPIIO_CALL(MPI_File_iwrite_at_all, (fh, offset, buf, count, datatype, request), &fh);
+    RECORDER_INTERCEPTOR_PROLOGUE_F(int, MPI_File_iwrite_at_all, (fh, offset, buf, count, datatype, request), ierr);
+    char **args = assemble_args_list(6, file2id(&fh), itoa(offset), ptoa(buf), itoa(count), type2name(datatype), ptoa(request));
+    RECORDER_INTERCEPTOR_EPILOGUE(6, args);
+}
+
 int RECORDER_MPI_IMP(MPI_File_seek) (MPI_File fh, MPI_Offset offset, int whence, MPI_Fint* ierr) {
     FILTER_MPIIO_CALL(MPI_File_seek, (fh, offset, whence), &fh);
     RECORDER_INTERCEPTOR_PROLOGUE_F(int, MPI_File_seek, (fh, offset, whence), ierr);
@@ -1209,6 +1223,17 @@ int WRAPPER_NAME(MPI_File_iwrite_shared)(MPI_File fh, const void *buf, int count
 extern void WRAPPER_NAME(mpi_file_iwrite_shared)(MPI_Fint* fh, const void* buf, int* count, MPI_Fint* datatype, MPI_Fint* request, MPI_Fint *ierr){ imp_MPI_File_iwrite_shared(PMPI_File_f2c(*fh), buf, (*count), PMPI_Type_f2c(*datatype), (MPI_Request*)request, ierr);}
 extern void WRAPPER_NAME(mpi_file_iwrite_shared_)(MPI_Fint* fh, const void* buf, int* count, MPI_Fint* datatype, MPI_Fint* request, MPI_Fint *ierr){ imp_MPI_File_iwrite_shared(PMPI_File_f2c(*fh), buf, (*count), PMPI_Type_f2c(*datatype), (MPI_Request*)request, ierr);}
 extern void WRAPPER_NAME(mpi_file_iwrite_shared__)(MPI_Fint* fh, const void* buf, int* count, MPI_Fint* datatype, MPI_Fint* request, MPI_Fint *ierr){ imp_MPI_File_iwrite_shared(PMPI_File_f2c(*fh), buf, (*count), PMPI_Type_f2c(*datatype), (MPI_Request*)request, ierr);}
+
+int WRAPPER_NAME(MPI_File_iwrite_all)(MPI_File fh, const void *buf, int count, MPI_Datatype datatype, MPI_Request *request) { return imp_MPI_File_iwrite_all(fh, buf, count, datatype, request, ierr); }
+extern void WRAPPER_NAME(mpi_file_iwrite_all)(MPI_Fint* fh, const void* buf, int* count, MPI_Fint* datatype, MPI_Fint* request, MPI_Fint *ierr){ imp_MPI_File_iwrite_all(PMPI_File_f2c(*fh), buf, (*count), PMPI_Type_f2c(*datatype), (MPI_Request*)request, ierr);}
+extern void WRAPPER_NAME(mpi_file_iwrite_all_)(MPI_Fint* fh, const void* buf, int* count, MPI_Fint* datatype, MPI_Fint* request, MPI_Fint *ierr){ imp_MPI_File_iwrite_all(PMPI_File_f2c(*fh), buf, (*count), PMPI_Type_f2c(*datatype), (MPI_Request*)request, ierr);}
+extern void WRAPPER_NAME(mpi_file_iwrite_all__)(MPI_Fint* fh, const void* buf, int* count, MPI_Fint* datatype, MPI_Fint* request, MPI_Fint *ierr){ imp_MPI_File_iwrite_all(PMPI_File_f2c(*fh), buf, (*count), PMPI_Type_f2c(*datatype), (MPI_Request*)request, ierr);}
+
+int WRAPPER_NAME(MPI_File_iwrite_at_all)(MPI_File fh, MPI_Offset offset, const void *buf, int count, MPI_Datatype datatype, MPI_Request *request) { return imp_MPI_File_iwrite_at_all(fh, offset, buf, count, datatype, request, ierr); }
+extern void WRAPPER_NAME(mpi_file_iwrite_at_all)(MPI_Fint* fh, MPI_Offset offset, const void* buf, int* count, MPI_Fint* datatype, MPI_Fint* request, MPI_Fint *ierr){ imp_MPI_File_iwrite_at_all(PMPI_File_f2c(*fh), offset, buf, (*count), PMPI_Type_f2c(*datatype), (MPI_Request*)request, ierr);}
+extern void WRAPPER_NAME(mpi_file_iwrite_at_all_)(MPI_Fint* fh, MPI_Offset offset, const void* buf, int* count, MPI_Fint* datatype, MPI_Fint* request, MPI_Fint *ierr){ imp_MPI_File_iwrite_at_all(PMPI_File_f2c(*fh), offset, buf, (*count), PMPI_Type_f2c(*datatype), (MPI_Request*)request, ierr);}
+extern void WRAPPER_NAME(mpi_file_iwrite_at_all__)(MPI_Fint* fh, MPI_Offset offset, const void* buf, int* count, MPI_Fint* datatype, MPI_Fint* request, MPI_Fint *ierr){ imp_MPI_File_iwrite_at_all(PMPI_File_f2c(*fh), offset, buf, (*count), PMPI_Type_f2c(*datatype), (MPI_Request*)request, ierr);}
+
 int WRAPPER_NAME(MPI_File_seek)(MPI_File fh, MPI_Offset offset, int whence) { return imp_MPI_File_seek(fh, offset, whence, ierr); }
 extern void WRAPPER_NAME(mpi_file_seek)(MPI_Fint* fh, MPI_Offset offset, int* whence, MPI_Fint *ierr){ imp_MPI_File_seek(PMPI_File_f2c(*fh), offset, (*whence), ierr);}
 extern void WRAPPER_NAME(mpi_file_seek_)(MPI_Fint* fh, MPI_Offset offset, int* whence, MPI_Fint *ierr){ imp_MPI_File_seek(PMPI_File_f2c(*fh), offset, (*whence), ierr);}
