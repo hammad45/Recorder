@@ -24,9 +24,11 @@ struct gotcha_binding_t posix_wrap_actions [] = {
     GOTCHA_WRAP_ACTION(pwrite64),
     GOTCHA_WRAP_ACTION(readv),
     GOTCHA_WRAP_ACTION(writev),
+    /*
     GOTCHA_WRAP_ACTION(mmap),
     GOTCHA_WRAP_ACTION(mmap64),
     GOTCHA_WRAP_ACTION(msync),
+    */
     GOTCHA_WRAP_ACTION(fopen),
     GOTCHA_WRAP_ACTION(fopen64),
     GOTCHA_WRAP_ACTION(fclose),
@@ -166,6 +168,7 @@ struct gotcha_binding_t mpi_wrap_actions [] = {
     GOTCHA_WRAP_ACTION(MPI_Waitsome),
     GOTCHA_WRAP_ACTION(MPI_Waitany),
     GOTCHA_WRAP_ACTION(MPI_Ssend),
+    GOTCHA_WRAP_ACTION(MPI_Issend),
     GOTCHA_WRAP_ACTION(MPI_Comm_split),
     GOTCHA_WRAP_ACTION(MPI_Comm_dup),
     GOTCHA_WRAP_ACTION(MPI_Comm_create),

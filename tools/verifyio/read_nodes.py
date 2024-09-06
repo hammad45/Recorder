@@ -4,7 +4,7 @@ from itertools import repeat
 from verifyio_graph import VerifyIONode
 
 accepted_mpi_funcs = [
- 'MPI_Send', 'MPI_Ssend', 'MPI_Isend',
+ 'MPI_Send', 'MPI_Ssend', 'MPI_Issend', 'MPI_Isend',
  'MPI_Recv', 'MPI_Sendrecv', 'MPI_Irecv',
  'MPI_Wait', 'MPI_Waitall', 'MPI_Waitany',
  'MPI_Waitsome', 'MPI_Test', 'MPI_Testall',
@@ -24,14 +24,18 @@ accepted_mpi_funcs = [
  'MPI_Cart_sub'
 ]
 
+accepted_meta_funcs = [
+ 'fsync', 'open', 'fopen', 'close', 'fclose'
+]
+
 def read_mpi_nodes(reader):
-    nprocs = reader.GM.total_ranks
-    mpi_nodes = [[] for i in repeat(None, nprocs)]
+
+    mpi_nodes = [[] for i in repeat(None, reader.nprocs)]
 
     func_list = reader.funcs
-    for rank in range(nprocs):
+    for rank in range(reader.nprocs):
         records = reader.records[rank]
-        for seq_id in range(reader.LMs[rank].total_records):
+        for seq_id in range(reader.num_records[rank]):
             func = func_list[records[seq_id].func_id]
             mpifh = None
             if func in accepted_mpi_funcs:
@@ -41,6 +45,22 @@ def read_mpi_nodes(reader):
                 mpi_nodes[rank].append(mpi_node)
 
     return mpi_nodes
+
+def read_metadata_io_nodes(reader):
+    metadata_io_nodes = [[] for i in repeat(None, reader.nprocs)]
+
+    func_list = reader.funcs
+    for rank in range(reader.nprocs):
+        records = reader.records[rank]
+        for seq_id in range(reader.num_records[rank]):
+            func = func_list[records[seq_id].func_id]
+            if func in accepted_meta_funcs:
+                fh = records[seq_id].args[0].decode('utf-8')
+                metadata_io_node = VerifyIONode(rank, seq_id, func, -1, fh)
+                metadata_io_nodes[rank].append(metadata_io_node)
+
+    return metadata_io_nodes
+
 
 '''
 Read confliciing pairs from a file
@@ -63,8 +83,7 @@ def read_io_nodes(reader, path):
     exist_n2s = set()
     duplicate = 0
 
-    nprocs = reader.GM.total_ranks
-    io_nodes = [[] for i in repeat(None, nprocs)]
+    io_nodes = [[] for i in repeat(None, reader.nprocs)]
     pairs = []
 
     f = open(path, "r")
@@ -82,7 +101,9 @@ def read_io_nodes(reader, path):
 
         buf = line.replace("\n", "").split(":")
         n1_buf = buf[0]
-        n2s_buf = buf[1].split(" ")[:2]
+        # TODO why is there a [:2] in the end?
+        # am i trying to reduce compute?
+        n2s_buf = buf[1].split(" ")
 
         if buf[1] not in exist_n2s:
             exist_n2s.add(buf[1])
@@ -92,7 +113,7 @@ def read_io_nodes(reader, path):
             io_nodes[n1.rank].append(n1)
             exist_nodes.add(n1_buf)
 
-        n2s = [[] for i in repeat(None, nprocs)]
+        n2s = [[] for i in repeat(None, reader.nprocs)]
         for n2_buf in n2s_buf:
             n2 = parse_one_node(n2_buf, file_id)
             if n2_buf not in exist_nodes:
@@ -106,5 +127,11 @@ def read_io_nodes(reader, path):
         # pairs.
         #if len(pairs) >= 1000:
         #    break;
+
+    # Include all meatadata records, e.g., open/close/fsync
+    # they are needed for verifying session/commit semantics
+    for rank in range(reader.nprocs):
+        metadata_nodes = read_metadata_io_nodes(reader)
+        io_nodes[rank] += metadata_nodes[rank]
 
     return io_nodes, pairs

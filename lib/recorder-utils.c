@@ -333,7 +333,7 @@ inline char* strtoa(const char* ptr) {
 }
 
 inline char* arrtoa(size_t arr[], int count) {
-    char *str = calloc(16 * count, sizeof(char));
+    char *str = calloc(3+16*count, sizeof(char));
     str[0] = '[';
     int pos = 1;
 
@@ -342,14 +342,11 @@ inline char* arrtoa(size_t arr[], int count) {
         char *s = itoa(arr[i]);
         memcpy(str+pos, s, strlen(s));
         pos += strlen(s);
-
-        if(i == count - 1)
-            str[pos++] = ']';
-        else
+        if (i != count-1)
             str[pos++] = ',';
-
         free(s);
     }
+    str[pos] = ']';
     return str;
 }
 

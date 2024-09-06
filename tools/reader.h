@@ -79,6 +79,23 @@ typedef struct PyRecord_t {
 } PyRecord;
 
 
+/**
+ * Simplified Record structure
+ * for use by the VerifyIO python
+ * code.
+ *
+ * Note in this structure, char** args
+ * no longer store every argument, but
+ * only those needed by VerifyIO
+ */
+typedef struct VerifyIORecord_t {
+    int func_id;
+    unsigned char call_depth;
+    unsigned char arg_count;
+    char** args;
+} VerifyIORecord;
+
+
 void recorder_init_reader(const char* logs_dir, RecorderReader *reader);
 void recorder_free_reader(RecorderReader *reader);
 
@@ -96,6 +113,7 @@ void recorder_free_record(Record* r);
  */
 void recorder_decode_records(RecorderReader* reader, int rank,
                              void (*user_op)(Record* r, void* user_arg), void* user_arg);
+// used by to implement read_all_records for recorder_viz
 void recorder_decode_records2(RecorderReader* reader, int rank,
                              void (*user_op)(Record* r, void* user_arg), void* user_arg);
 

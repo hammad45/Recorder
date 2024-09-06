@@ -725,6 +725,11 @@ int RECORDER_MPI_IMP(MPI_Ssend) (CONST void *buf, int count, MPI_Datatype dataty
     char **args = assemble_args_list(6, ptoa(buf), itoa(count), type2name(datatype), itoa(dest), itoa(tag), comm2name(&comm));
     RECORDER_INTERCEPTOR_EPILOGUE(6, args);
 }
+int RECORDER_MPI_IMP(MPI_Issend) (CONST void *buf, int count, MPI_Datatype datatype, int dest, int tag, MPI_Comm comm, MPI_Request *req, MPI_Fint* ierr) {
+    RECORDER_INTERCEPTOR_PROLOGUE_F(int, MPI_Issend, (buf, count, datatype, dest, tag, comm, req), ierr);
+    char **args = assemble_args_list(7, ptoa(buf), itoa(count), type2name(datatype), itoa(dest), itoa(tag), comm2name(&comm), itoa(*req));
+    RECORDER_INTERCEPTOR_EPILOGUE(7, args);
+}
 
 
 int RECORDER_MPI_IMP(MPI_Comm_split) (MPI_Comm comm, int color, int key, MPI_Comm *newcomm, MPI_Fint* ierr) {
@@ -1000,6 +1005,10 @@ int WRAPPER_NAME(MPI_Ssend)(const void *buf, int count, MPI_Datatype datatype, i
 extern void WRAPPER_NAME(mpi_ssend)(const void* buf, int* count, MPI_Fint* datatype, int* dest, int* tag, MPI_Fint* comm, MPI_Fint *ierr){imp_MPI_Ssend(buf, (*count), PMPI_Type_f2c(*datatype), (*dest), (*tag), PMPI_Comm_f2c(*comm), ierr);}
 extern void WRAPPER_NAME(mpi_ssend_)(const void* buf, int* count, MPI_Fint* datatype, int* dest, int* tag, MPI_Fint* comm, MPI_Fint *ierr){ imp_MPI_Ssend(buf, (*count), PMPI_Type_f2c(*datatype), (*dest), (*tag), PMPI_Comm_f2c(*comm), ierr);}
 extern void WRAPPER_NAME(mpi_ssend__)(const void* buf, int* count, MPI_Fint* datatype, int* dest, int* tag, MPI_Fint* comm, MPI_Fint *ierr){ imp_MPI_Ssend(buf, (*count), PMPI_Type_f2c(*datatype), (*dest), (*tag), PMPI_Comm_f2c(*comm), ierr);}
+int WRAPPER_NAME(MPI_Issend)(const void *buf, int count, MPI_Datatype datatype, int dest, int tag, MPI_Comm comm, MPI_Request *request) {return imp_MPI_Issend(buf, count, datatype, dest, tag, comm, request, ierr); }
+extern void WRAPPER_NAME(mpi_issend)(const void *buf, int* count, MPI_Fint* datatype, int* dest, int* tag, MPI_Fint* comm, MPI_Fint *request, MPI_Fint* ierr){imp_MPI_Issend(buf, *count, PMPI_Type_f2c(*datatype), *dest, *tag, PMPI_Comm_f2c(*comm), (MPI_Request*)request, ierr);}
+extern void WRAPPER_NAME(mpi_issend_)(const void *buf, int* count, MPI_Fint* datatype, int* dest, int* tag, MPI_Fint* comm, MPI_Fint *request, MPI_Fint* ierr){imp_MPI_Issend(buf, *count, PMPI_Type_f2c(*datatype), *dest, *tag, PMPI_Comm_f2c(*comm), (MPI_Request*)request, ierr);}
+extern void WRAPPER_NAME(mpi_issend__)(const void *buf, int* count, MPI_Fint* datatype, int* dest, int* tag, MPI_Fint* comm, MPI_Fint *request, MPI_Fint* ierr){imp_MPI_Issend(buf, *count, PMPI_Type_f2c(*datatype), *dest, *tag, PMPI_Comm_f2c(*comm), (MPI_Request*)request, ierr);}
 int WRAPPER_NAME(MPI_Ireduce)(const void *sendbuf, void *recvbuf, int count, MPI_Datatype datatype, MPI_Op op, int root, MPI_Comm comm, MPI_Request *request) { return imp_MPI_Ireduce(sendbuf, recvbuf, count, datatype, op, root, comm, request, ierr); }
 extern void WRAPPER_NAME(mpi_ireduce)(const void* sendbuf, void* recvbuf, int* count, MPI_Fint* datatype, MPI_Fint* op, int* root, MPI_Fint* comm, MPI_Fint* request, MPI_Fint *ierr){ imp_MPI_Ireduce(sendbuf, recvbuf, (*count), PMPI_Type_f2c(*datatype), PMPI_Op_f2c(*op), (*root), PMPI_Comm_f2c(*comm), (MPI_Request*)request, ierr);}
 extern void WRAPPER_NAME(mpi_ireduce_)(const void* sendbuf, void* recvbuf, int* count, MPI_Fint* datatype, MPI_Fint* op, int* root, MPI_Fint* comm, MPI_Fint* request, MPI_Fint *ierr){ imp_MPI_Ireduce(sendbuf, recvbuf, (*count), PMPI_Type_f2c(*datatype), PMPI_Op_f2c(*op), (*root), PMPI_Comm_f2c(*comm), (MPI_Request*)request, ierr);}

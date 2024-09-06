@@ -3,6 +3,7 @@
 #include <stdbool.h>
 #include <limits.h>
 #include <vector>
+#include <algorithm>
 extern "C" {
 #include "reader.h"
 #include "reader-private.h"
@@ -19,6 +20,18 @@ int compare_by_offset(const void *lhs, const void *rhs) {
     Interval *first = (Interval*)lhs;
     Interval *second = (Interval*)rhs;
     return first->offset - second->offset;
+}
+
+int compare_by_index(const void *lhs, const void *rhs) {
+    Interval *first = (Interval*)lhs;
+    Interval *second = (Interval*)rhs;
+
+    if (first->rank < second->rank)
+        return 1;
+    else if (first->rank == second->rank)
+        return first->seqId < second->seqId;
+    else
+        return 0;
 }
 
 int sum_array(int *arr, int count) {
@@ -93,6 +106,9 @@ void detect_conflicts(IntervalsMap *IM, int num_files, const char* base_dir) {
                         conflicts.size());
                 fprintf(conflict_file, "%d,%d,%s,%s:",
                         i1->rank,i1->seqId,i1->isRead?"r":"w",i1->mpifh);
+                // previously intervals were sorted by starting offset
+                // when saving it out, we sort it by sequence id
+                sort(conflicts.begin(), conflicts.end(), compare_by_index);
                 for (vector<Interval*>::iterator it = conflicts.begin(); it!=conflicts.end(); ++it) {
                     i2 = *it;
                     fprintf(conflict_file, "%d,%d,%s,%s%s",
