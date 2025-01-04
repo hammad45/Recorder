@@ -1,3 +1,5 @@
+|build|
+
 Overview
 ========
 
@@ -51,15 +53,12 @@ Symposium on High-Performance Parallel and Distributed Computing (HPDC).
 
 .. toctree::
    :maxdepth: 1
-   :hidden
-
    quickstart
    build
    usage
    features
    postprocessing
    changes
-   
+
 .. |build| image:: https://github.com/uiuc-hpc/Recorder/actions/workflows/cmake.yml/badge.svg
    :target: https://github.com/uiuc-hpc/Recorder/actions/workflows/cmake.yml
-

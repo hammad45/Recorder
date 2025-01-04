@@ -63,8 +63,8 @@ kernels.
 add ``-DRECORDER_ENABLE_PARQUET=ON`` to cmake to build the Parquet
 format converter
 
-<!--
-2. Building Recorder with Spack
+
+Building Recorder with Spack
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 *NOTE: please do not use Spack to install Recorder for now. The version
@@ -74,8 +74,7 @@ For now, building Recorder with Spack provides less flexibility. We will
 add the CMake options for spack as well.
 
 .. code:: bash
-
-   spack install recorder
+spack install recorder
 
 By default Recorder generates traces from all levels, you can use **~**
 to disable a specific level.
@@ -86,4 +85,3 @@ tracing disabled.
 .. code:: bash
 
    spack install recorder~hdf5~mpi
--->
