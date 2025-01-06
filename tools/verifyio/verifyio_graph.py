@@ -23,11 +23,12 @@ class VerifyIONode:
         return str(self.rank) + "-" + str(self.seq_id) + "-" + str(self.func)
 
     def __str__(self):
-        if "write" in self.func or "read" in self.func or \
-            self.func.startswith("MPI_File_"):
-                return "Rank %d: %dth %s(%s)" %(self.rank, self.seq_id, self.func, self.mpifh)
-        else:
-            return "Rank %d: %dth %s" %(self.rank, self.seq_id, self.func)
+        #if "write" in self.func or "read" in self.func or \
+        #    self.func.startswith("MPI_File_"):
+        #        return "Rank %d: %dth %s(%s)" %(self.rank, self.seq_id, self.func, self.mpifh)
+        #else:
+        #    return "Rank %d: %dth %s" %(self.rank, self.seq_id, self.func)
+        return "<Rank %d: %dth %s>" %(self.rank, self.seq_id, self.func)
 
 
 '''
@@ -164,13 +165,26 @@ class VerifyIOGraph:
         # Before calling this function, we should
         # have added all nodes. We use this function
         # to add edges of matching MPI calls
+        from match_mpi import MPICallType
         ghost_node_count = 0
         for edge in mpi_edges:
 
+            # case i: point to point calls
+            if edge.call_type == MPICallType.POINT_TO_POINT:
+                self.add_edge(edge.head, edge.tail)
+                continue
+
+            # case ii: collective calls
+            # We handle all collect calls in a same way
+            # just use them as a fence to establish order
+            # between I/O calls
+            # add a ghost node and connect all predecessors
+            # and successors from all ranks.
+            # This prvents circle
             mpi_calls = edge.get_all_involved_calls()
             if len(mpi_calls) <= 1: continue
-
             for mpi_call in mpi_calls:
+
                 # Add a ghost node and connect all predecessors
                 # and successors from all ranks. This prvents the circle
                 ghost_node = VerifyIONode(rank=nprocs, seq_id=ghost_node_count, func="ghost")
@@ -215,7 +229,15 @@ class VerifyIOGraph:
         try:
             cycle = nx.find_cycle(self.G)
             print("Generated graph contain cycles. Original code may have bugs.")
-            print(cycle)
+
+            simplified_cycle = []
+            for edge in cycle:
+                c1, c2 = edge[0], edge[1]
+                rank1 = self.key2rank(c1)
+                rank2 = self.key2rank(c2)
+                if (rank1 != rank2):
+                    simplified_cycle.append(edge)
+            print(simplified_cycle)
             has_cycles = True
         except nx.exception.NetworkXNoCycle:
             pass

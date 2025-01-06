@@ -387,8 +387,8 @@ def match_pt2pt(send_call, helper):
 
     # TODO: for non-blocking send/recv on both side, we actually
     # should generate two edges:
-    # Edge 1: Ri-Isend --> Rj-Wait
-    # Edge 2: Rj-Irecv --> Ri-Wait
+    # Edge 1: Pi-Isend --> Pj-Wait
+    # Edge 2: Pj-Irecv --> Pi-Wait
     # Currently we return only Edge 1.
     '''
     if send_call.is_blocking_call():

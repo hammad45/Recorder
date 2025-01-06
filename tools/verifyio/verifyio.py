@@ -1,7 +1,7 @@
 import argparse, time, sys
 from recorder_reader import RecorderReader
-from read_nodes import read_mpi_nodes, read_io_nodes
-from match_mpi import match_mpi_calls, MPICallType
+from read_nodes import read_verifyio_nodes_and_conflicts
+from match_mpi import match_mpi_calls
 from verifyio_graph import VerifyIONode, VerifyIOGraph
 
 """
@@ -15,6 +15,8 @@ class VerifyIO:
         self.show_summary = args.show_summary       # whether to show summary in the end
         self.show_details = args.show_details       # whether to show violation details
         self.show_full_chain = args.show_full_chain # whether to show full call chain
+        if self.semantics == "Custom":
+            self.semantic_string = args.semantic_string # Custom semantics string
         self.reader = None                          # RecorderReader
         self.G = None                               # Happens-before Graph (VerifyIOGraph)
         self.all_nodes = None                       # Per-rank VerifyIONode list
@@ -81,7 +83,7 @@ def verify_pair_proper_synchronization(n1, n2, vio):
         if func_name == "fcntl" or func_name == "flock":
             return True
 
-    v1, v2, next_sync_index = None, None, None
+    v1, v2 = None, None
 
     if vio.semantics == "POSIX":
         v1 = n1
@@ -104,6 +106,8 @@ def verify_pair_proper_synchronization(n1, n2, vio):
             # pass in funcs=None to get the immediate next/prev po node.
             v1 = vio.next_po_node(next_sync, None)
         v2 = prev_sync
+    elif vio.semantics == "Custom":
+        v1, v2 = custom_semantic(vio.semantic_string, n1, n2)
 
     if (not v1) or (not v2):
         return False
@@ -196,7 +200,7 @@ def verify_execution_proper_synchronization(conflict_pairs, vio:VerifyIO):
                 for n2 in n2s[rank]:
                     if args.show_summary:
                         get_violation_info([n1, n2], vio, summary, False)
-                    print(f"{vio.semantics} violation: {n1} {n2}")
+                    #print(f"{vio.semantics} violation: {n1} {n2}")
                 continue
 
             # now we are here, its very likely that n1 is not
@@ -210,7 +214,7 @@ def verify_execution_proper_synchronization(conflict_pairs, vio:VerifyIO):
                     if args.show_summary:
                         get_violation_info([n1, n2], vio, summary, this_pair_ok)
                     total_violations += 1
-                    print(f"{vio.semantics} violation: {n1} {n2}")
+                    #print(f"{vio.semantics} violation: {n1} {n2}")
 
         t2 = time.time()
         #print(debug_str+", time: %.3f" %(t2-t1))
@@ -221,33 +225,18 @@ def verify_execution_proper_synchronization(conflict_pairs, vio:VerifyIO):
     print("Total conflict pairs: %d" %total_conflicts)
 
 
-# A helper function to map the mpi edges to a 3D data structure to reduce the search time without changing the original mpi_edges
+# A helper function to map the mpi edges to a 3D data structure 
+# to reduce the search time without changing the original mpi_edges
 def map_edges(mpi_edges, reader):
     num_ranks = reader.nprocs
     edges = [{} for _ in range(num_ranks)]
 
     for e in mpi_edges:
-        if e.call_type == MPICallType.ALL_TO_ALL:
-            for edge_call_head in e.head:
-                if edge_call_head.seq_id not in edges[edge_call_head.rank]:
-                    edges[edge_call_head.rank][edge_call_head.seq_id] = [None] * num_ranks
-                for edge_call_tail in e.tail:
-                    edges[edge_call_head.rank][edge_call_head.seq_id][edge_call_tail.rank] = edge_call_tail
-        elif e.call_type == MPICallType.ONE_TO_MANY:
-            if e.head.seq_id not in edges[e.head.rank]:
-                edges[e.head.rank][e.head.seq_id] = [None] * num_ranks
-            for edge_call_tail in e.tail:
-                edges[e.head.rank][e.head.seq_id][edge_call_tail.rank] = edge_call_tail
-        elif e.call_type == MPICallType.MANY_TO_ONE:
-            for edge_call_head in e.head:
-                if edge_call_head.seq_id not in edges[edge_call_head.rank]:
-                    edges[edge_call_head.rank][edge_call_head.seq_id] = [None] * num_ranks
-                edges[edge_call_head.rank][edge_call_head.seq_id][e.tail.rank] = e.tail
-        else:
-            if e.head.seq_id not in edges[e.head.rank]:
-                edges[e.head.rank][e.head.seq_id] = [None] * num_ranks
-            edges[e.head.rank][e.head.seq_id][e.tail.rank] = e.tail
-
+        calls = e.get_all_involved_calls()
+        for c in calls:
+            edges[c.rank][c.seq_id] = [None] * num_ranks
+            for t in calls:
+                edges[c.rank][c.seq_id][t.rank] = t
     return edges
 
 
@@ -344,21 +333,44 @@ def get_violation_info(nodes: list, vio, summary, this_pair_ok):
             print(f"{nodes[0]}: {l_str} <--> {nodes[1]}: {r_str} on file {file}, properly synchronized: {this_pair_ok}")
 
 
-if __name__ == "__main__":
 
+def custom_semantic(str=None, n1:VerifyIO =None, n2: VerifyIO = None):
+
+    def get_offset(s):
+        s = s.split(":")[1].split("[")[0]
+        return int(s[1:]) if "+" in s else int(s) if "-" in s else 0
+
+    def get_node(conflict_str, node):
+        offset = get_offset(conflict_str)
+        if offset == 0:
+            return node
+
+        sync_arr = conflict_str.split("[")[1].split("]")[0].split(",")
+        po_node_fn = vio.next_po_node if offset > 0 else vio.prev_po_node
+        return po_node_fn(node, sync_arr if sync_arr else None)
+    
+    c1, c2 = str.split("&")
+    return get_node(c1, n1), get_node(c2, n2)
+
+    
+
+
+
+
+if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("traces_folder")
-    parser.add_argument("--semantics", type=str, choices=["POSIX", "MPI-IO", "Commit", "Session"],
+    parser.add_argument("--semantics", type=str, choices=["POSIX", "MPI-IO", "Commit", "Session", "Custom"],
                         default="MPI-IO", help="Verify if I/O operations are properly synchronized under the specific semantics")
     parser.add_argument("--algorithm", type=int, choices=[1, 2, 3, 4],
                         default=3, help="1: graph reachibility, 2: transitive closure, 3: vector clock, 4: on-the-fly MPI check")
+    parser.add_argument("--semantic_string", type=str, default="c1:+1[MPI_File_close, MPI_File_sync] & c2:-1[MPI_File_open, MPI_File_sync]")
     parser.add_argument("--show_details", action="store_true", help="Show details of the conflicts")
     parser.add_argument("--show_summary", action="store_true", help="Show summary of the conflicts")
     parser.add_argument("--show_full_chain", action="store_true", help="Show the full call chain of the conflicts")
     args = parser.parse_args()
 
     vio = VerifyIO(args)
-
     #import psutil
     #print('1. RAM Used (GB):', psutil.virtual_memory()[3]/1000000000)
 
@@ -366,21 +378,19 @@ if __name__ == "__main__":
     vio.reader = RecorderReader(args.traces_folder)
     #print('2. RAM Used (GB):', psutil.virtual_memory()[3]/1000000000)
 
-    mpi_nodes = read_mpi_nodes(vio.reader)
+    vio.all_nodes, conflicts = read_verifyio_nodes_and_conflicts(vio.reader)
+    t2 = time.time()
+    print("Step 1. read trace records and conflicts time: %.3f secs" %(t2-t1))
     #print('3. RAM Used (GB):', psutil.virtual_memory()[3]/1000000000)
 
-    io_nodes, conflict_pairs = read_io_nodes(vio.reader, args.traces_folder+"/conflicts.txt")
-    t2 = time.time()
-    print(args.traces_folder)
-    print("Step 1. read trace records and conflicts time: %.3f secs" %(t2-t1))
-    #print('4. RAM Used (GB):', psutil.virtual_memory()[3]/1000000000)
-
-    vio.all_nodes = mpi_nodes
+    # TODO: do we need to sort here?
+    # the recorder traces should be sorted already
+    # and the conflict operations are also sorted before writing out.
+    #
+    # Set the index of each node with respect to per-rank VerifyIONode list
+    # this index will be used later to accelerate next_po_node/prev_po_node
     for rank in range(vio.reader.nprocs):
-        vio.all_nodes[rank] += io_nodes[rank]
         vio.all_nodes[rank] = sorted(vio.all_nodes[rank], key=lambda x: x.seq_id)
-        # Set the index of each node with respect to per-rank VerifyIONode list
-        # this index will be used later to accelerate next_po_node/prev_po_node
         for i, n in enumerate(vio.all_nodes[rank]): n.index = i
     #print('5. RAM Used (GB):', psutil.virtual_memory()[3]/1000000000)
 
@@ -401,18 +411,19 @@ if __name__ == "__main__":
         # Correct code (traces) should generate a DAG without any cycles
         if vio.G.check_cycles(): quit()
 
-        t1 = time.time()
-        vio.G.run_vector_clock()
-        #vio.G.run_transitive_closure()
-        t2 = time.time()
-        print("Step 4. run vector clock algorithm: %.3f secs" %(t2-t1))
-        #print('8. RAM Used (GB):', psutil.virtual_memory()[3]/1000000000)
-        # vio.G.plot_graph("vgraph.jpg")
+        if vio.algorithm == 2 or vio.algorithm == 3:
+            t1 = time.time()
+            vio.G.run_vector_clock()
+            #vio.G.run_transitive_closure()
+            t2 = time.time()
+            print("Step 4. run vector clock algorithm: %.3f secs" %(t2-t1))
+            #print('8. RAM Used (GB):', psutil.virtual_memory()[3]/1000000000)
+            # vio.G.plot_graph("vgraph.jpg")
     else:
         mapped_mpi_edges = map_edges(mpi_edges, vio.reader)
 
     t1 = time.time()
-    verify_execution_proper_synchronization(conflict_pairs, vio)
+    verify_execution_proper_synchronization(conflicts, vio)
     t2 = time.time()
     print("Step 5. %s semantics verification time: %.3f secs" %(vio.semantics, t2-t1))
     #print('9. RAM Used (GB):', psutil.virtual_memory()[3]/1000000000)
