@@ -82,9 +82,12 @@
 #ifdef NC_VERSION_MINOR
 
 #if (NC_VERSION_MAJOR*10+NC_VERSION_MINOR) < 49
-#define NC_memio    int
 #define NC_Dispatch int
 #endif
+#if (NC_VERSION_MAJOR*100+NC_VERSION_MINOR*10+NC_VERSION_PATCH) < 492
+#define NC_memio    int
+#endif
+
 
 #endif
 #endif
@@ -245,7 +248,7 @@ GOTCHA_WRAP(dup, int, (int oldfd));
 GOTCHA_WRAP(dup2, int, (int oldfd, int newfd));
 GOTCHA_WRAP(pipe, int, (int pipefd[2]));
 GOTCHA_WRAP(mkfifo, int, (const char *pathname, mode_t mode));
-GOTCHA_WRAP(umask, mode_t, (mode_t mask));
+//GOTCHA_WRAP(umask, mode_t, (mode_t mask));
 GOTCHA_WRAP(fdopen, FILE*, (int fd, const char *mode));
 GOTCHA_WRAP(fileno, int, (FILE *stream));
 GOTCHA_WRAP(access, int, (const char *path, int amode));
