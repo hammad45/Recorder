@@ -43,6 +43,7 @@ Symposium on High-Performance Parallel and Distributed Computing (HPDC).
 
 
 .. toctree::
+   :hidden
    quickstart
    build
    usage
